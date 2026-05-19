@@ -2,7 +2,7 @@ const User = require('../models/User');
 const UserStats = require('../models/UserStats');
 const Wallet = require('../models/Wallet');
 const { seedDefaultsForUser } = require('./categoryLocksController');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 /**
