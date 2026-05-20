@@ -1,4 +1,5 @@
 const UserStats = require('../models/UserStats');
+const Coupon = require('../models/Coupon');
 
 /**
  * POST /api/subscription/activate
@@ -189,4 +190,85 @@ const getStatus = async (req, res) => {
   }
 };
 
-module.exports = { activate, cancel, activateTrial, getStatus };
+/**
+ * GET /api/subscription/coupons
+ * Returns a list of 50 coupons. Generates them if they don't exist.
+ */
+const getCoupons = async (req, res) => {
+  try {
+    let coupons = await Coupon.find().sort({ createdAt: -1 });
+    
+    if (coupons.length === 0) {
+      const newCoupons = [];
+      for (let i = 0; i < 50; i++) {
+        const randomString = Math.random().toString(36).substring(2, 8).toUpperCase();
+        newCoupons.push({ code: `FLOOSY-PRO-${randomString}` });
+      }
+      await Coupon.insertMany(newCoupons);
+      coupons = await Coupon.find().sort({ createdAt: -1 });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Coupons retrieved successfully',
+      data: coupons,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message, data: null });
+  }
+};
+
+/**
+ * POST /api/subscription/redeem-coupon
+ * Redeems a coupon and activates permanent premium.
+ */
+const redeemCoupon = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Coupon code is required', data: null });
+    }
+
+    const coupon = await Coupon.findOne({ code: code.toUpperCase() });
+    if (!coupon) {
+      return res.status(400).json({ success: false, message: 'Invalid coupon code', data: null });
+    }
+
+    if (coupon.isUsed) {
+      return res.status(400).json({ success: false, message: 'This coupon is invalid or already used. Please use another coupon.', data: null });
+    }
+
+    // Mark as used
+    coupon.isUsed = true;
+    coupon.usedBy = req.user.id;
+    coupon.usedAt = new Date();
+    await coupon.save();
+
+    // Upgrade user to permanent elite
+    const stats = await UserStats.findOneAndUpdate(
+      { userId: req.user.id },
+      {
+        isPremium: true,
+        subscriptionPlan: 'elite',
+        subscriptionCycle: 'lifetime',
+        premiumExpiresAt: null,
+        trialStartedAt: null,
+      },
+      { new: true, runValidators: true, upsert: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Premium Subscription activated',
+      data: {
+        isPremium: stats.isPremium,
+        subscriptionPlan: stats.subscriptionPlan,
+        subscriptionCycle: stats.subscriptionCycle,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message, data: null });
+  }
+};
+
+module.exports = { activate, cancel, activateTrial, getStatus, getCoupons, redeemCoupon };

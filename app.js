@@ -1,15 +1,70 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
 
 const app = express();
 
+// ── Rate Limiters ───────────────────────────────────────────────────
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // limit each IP to 100 requests per windowMs
+  message: { success: false, message: 'تم تجاوز الحد الأقصى للطلبات، يرجى المحاولة لاحقاً.', data: null },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // limit each IP to 10 requests per windowMs
+  message: { success: false, message: 'تم تجاوز الحد الأقصى لطلبات المصادقة، يرجى المحاولة لاحقاً.', data: null },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 // ── Global Middleware ───────────────────────────────────────────────
+// 1. Helmet (Configured for Mobile API)
+app.use(helmet({
+  contentSecurityPolicy: false, // Not strictly needed for APIs without HTML
+  crossOriginEmbedderPolicy: false,
+}));
+
+// 2. CORS
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+
+// 3. Global Rate Limiting
+app.use(globalLimiter);
+
+// 4. Body Parser (10kb limit)
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// 5. NoSQL Injection Protection with Logging
+app.use((req, res, next) => {
+  const checkKeys = (obj) => {
+    if (!obj) return false;
+    for (const key in obj) {
+      if (key.includes('$') || key.includes('.')) return true;
+      if (typeof obj[key] === 'object') {
+        if (checkKeys(obj[key])) return true;
+      }
+    }
+    return false;
+  };
+
+  if (checkKeys(req.body) || checkKeys(req.params) || checkKeys(req.query)) {
+    console.warn(`[SECURITY] Blocked/Sanitized NoSQL Injection attempt from IP: ${req.ip} - URL: ${req.originalUrl}`);
+  }
+  next();
+});
+
+app.use(mongoSanitize({
+  replaceWith: '_'
+}));
 
 // ── Route Mounting ─────────────────────────────────────────────────
-app.use('/api/auth', require('./routes/auth'));
+app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/categories', require('./routes/categories'));
