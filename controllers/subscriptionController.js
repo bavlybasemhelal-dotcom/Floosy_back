@@ -235,7 +235,11 @@ const redeemCoupon = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid coupon code', data: null });
     }
 
-    const previouslyUsedCoupon = await Coupon.findOne({ usedBy: req.user.id });
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: User ID is missing from token', data: null });
+    }
+
+    const previouslyUsedCoupon = await Coupon.findOne({ usedBy: req.user.id, isUsed: true });
     if (previouslyUsedCoupon) {
       return res.status(400).json({ success: false, message: 'You have already redeemed a coupon. Only one coupon is allowed per user.', data: null });
     }
