@@ -192,15 +192,16 @@ const getStatus = async (req, res) => {
 
 /**
  * GET /api/subscription/coupons
- * Returns a list of 50 coupons. Generates them if they don't exist.
+ * Returns a list of 100 coupons. Generates them if they don't exist.
  */
 const getCoupons = async (req, res) => {
   try {
     let coupons = await Coupon.find().sort({ createdAt: -1 });
     
-    if (coupons.length === 0) {
+    if (coupons.length < 100) {
       const newCoupons = [];
-      for (let i = 0; i < 50; i++) {
+      const needed = 100 - coupons.length;
+      for (let i = 0; i < needed; i++) {
         const randomString = Math.random().toString(36).substring(2, 8).toUpperCase();
         newCoupons.push({ code: `FLOOSY-PRO-${randomString}` });
       }
@@ -232,6 +233,11 @@ const redeemCoupon = async (req, res) => {
     const coupon = await Coupon.findOne({ code: code.toUpperCase() });
     if (!coupon) {
       return res.status(400).json({ success: false, message: 'Invalid coupon code', data: null });
+    }
+
+    const previouslyUsedCoupon = await Coupon.findOne({ usedBy: req.user.id });
+    if (previouslyUsedCoupon) {
+      return res.status(400).json({ success: false, message: 'You have already redeemed a coupon. Only one coupon is allowed per user.', data: null });
     }
 
     if (coupon.isUsed) {
