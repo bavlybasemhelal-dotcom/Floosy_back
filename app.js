@@ -4,7 +4,23 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 
+const connectDB = require('./config/db');
+
 const app = express();
+
+// Trust proxy for Vercel to get correct IP for rate limiting
+app.set('trust proxy', 1);
+
+// Ensure MongoDB is connected before handling any requests (Serverless pattern)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error('Database connection failed:', error);
+    res.status(500).json({ success: false, message: 'Database connection error', data: null });
+  }
+});
 
 // ── Rate Limiters ───────────────────────────────────────────────────
 const globalLimiter = rateLimit({
