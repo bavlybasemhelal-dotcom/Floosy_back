@@ -248,12 +248,6 @@ const redeemCoupon = async (req, res) => {
       return res.status(400).json({ success: false, message: 'This coupon is invalid or already used. Please use another coupon.', data: null });
     }
 
-    // Mark as used
-    coupon.isUsed = true;
-    coupon.usedBy = req.user.id;
-    coupon.usedAt = new Date();
-    await coupon.save();
-
     // Upgrade user to permanent elite
     const stats = await UserStats.findOneAndUpdate(
       { userId: req.user.id },
@@ -266,6 +260,12 @@ const redeemCoupon = async (req, res) => {
       },
       { new: true, runValidators: true, upsert: true }
     );
+
+    // Mark as used after successful upgrade
+    coupon.isUsed = true;
+    coupon.usedBy = req.user.id;
+    coupon.usedAt = new Date();
+    await coupon.save();
 
     res.status(200).json({
       success: true,

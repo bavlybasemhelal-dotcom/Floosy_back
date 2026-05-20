@@ -86,7 +86,7 @@ const userStatsSchema = new mongoose.Schema(
     /** Subscription billing cycle */
     subscriptionCycle: {
       type: String,
-      enum: ['none', 'monthly', 'yearly'],
+      enum: ['none', 'monthly', 'yearly', 'lifetime'],
       default: 'none',
     },
   },
